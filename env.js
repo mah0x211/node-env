@@ -86,7 +86,11 @@ function mergeArgv( args, opts )
         opt = opts[keys[i]];
         name = opt.name;
         abbr = opt.abbr;
-        if( args[abbr] )
+        
+        if( !name ){
+            name = abbr;
+        }
+        else if( args[abbr] )
         {
             // same option declare
             if( args[name] ){
@@ -97,13 +101,16 @@ function mergeArgv( args, opts )
             }
             delete args[abbr];
         }
-        // value required
-        if( name in args && opt.arg && !args[name] ){
-            error.push( 'passed argument --' + name + ' value is undefined' );
-        }
-        // required option
-        else if( opt.required && !args[name] ){
-            error.push( 'required argument --' + name + ' is undefined' );
+        if( name )
+        {
+            // value required
+            if( name in args && opt.arg && !args[name] ){
+                error.push( 'passed argument --' + name + ' value is undefined' );
+            }
+            // required option
+            else if( opt.required && !args[name] ){
+                error.push( 'required argument --' + name + ' is undefined' );
+            }
         }
     }
     
