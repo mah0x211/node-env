@@ -14,10 +14,13 @@ function makeUsage( opts, cmd )
     var idt4 = '    ',
         head = '\nUsage:\n\n    ' + cmd,
         tail = '',
-        arg;
+        keys = Object.keys( opts ),
+        nkey = keys.length,
+        i,opt,arg;
     
-    opts.forEach(function(opt)
+    for( i = 0; i < nkey; i++ )
     {
+        opt = opts[keys[i]];
         arg = '-' + opt.abbr;
         tail += '\n' + idt4 + '-' + opt.abbr + ', --' + opt.name + 
                 ' : ' + opt.desc;
@@ -38,7 +41,7 @@ function makeUsage( opts, cmd )
             tail += '\n' + idt4 + '[default] ' + opt.def;
         }
         tail += '\n';
-    });
+    }
     
     return head + '\n' + tail;
 }
@@ -73,11 +76,14 @@ function parseArgv()
 function mergeArgv( args, opts )
 {
     var error = [],
-        name,abbr;
+        keys = Object.keys( opts ),
+        nkey = keys.length,
+        i,opt,name,abbr;
     
     // check name and requirement
-    opts.forEach(function(opt)
+    for( i = 0; i < nkey; i++ )
     {
+        opt = opts[keys[i]];
         name = opt.name;
         abbr = opt.abbr;
         if( args[abbr] )
@@ -99,7 +105,7 @@ function mergeArgv( args, opts )
         else if( opt.required && !args[name] ){
             error.push( 'required argument --' + name + ' is undefined' );
         }
-    });
+    }
     
     return ( error.length ) ? error : undefined;
 }
