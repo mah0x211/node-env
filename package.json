@@ -1,6 +1,6 @@
 {
     "name": "env",
     "author": "Masatoshi Teruya <https://twitter.com/mah0x211>",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "main": "./env.js"
 }

@@ -113,12 +113,9 @@ function mergeArgv( args, opts )
 
 function Env( opts, cmd )
 {
-    if( !( this instanceof Env ) ){
-        return new Env( opts, cmd );
-    }
-    
-    var argv = undefined,
-        error = undefined,
+    var obj = { __proto__: null },
+        envs = { __proto__: null },
+        argv = undefined,
         usage = undefined;
     
     if( arguments.length < 2 || typeof cmd !== 'string' ){
@@ -131,27 +128,24 @@ function Env( opts, cmd )
         opts = { __proto__: null };
     }
     
+    // append env
+    for( var p in process.env ){
+        obj[p] = process.env[p];
+    }
     // create usage
-    usage = makeUsage( opts, cmd );
+    obj.usage = makeUsage( opts, cmd );
     // parse command line arguments
-    argv = parseArgv();
+    obj.argv = parseArgv();
     // manipulate
-    error = mergeArgv( argv, opts );
+    obj.error = mergeArgv( obj.argv, opts );
     // freeze
-    Object.freeze( argv );
-    // create accessor
-    this.__defineGetter__('cmd',function(){
-        return cmd;
-    });
-    this.__defineGetter__('usage',function(){
-        return usage;
-    });
-    this.__defineGetter__('argv',function(){
-        return argv;
-    });
-    this.__defineGetter__('error',function(){
-        return error;
-    });
+    if( obj.error ){
+        Object.freeze( obj.error );
+    }
+    Object.freeze( obj.argv._ );
+    Object.freeze( obj.argv );
+    Object.freeze( obj );
+    return obj;
 }
 
 module.exports = Env;
