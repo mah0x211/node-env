@@ -9,66 +9,127 @@ var RE_ISARG = new RegExp(
         'g'
     );
 
-function makeUsage( opts, cmd )
+function makeUsage( cmd, opts )
 {
-    var idt4 = '    ',
-        head = '\nUsage:\n\n    ' + cmd,
-        tail = '',
-        keys = Object.keys( opts ),
-        nkey = keys.length,
-        i,opt,arg;
+    var res = ['Usage:'],
+        idt2 = '  ',
+        idt4 = '    ',
+        usage = [idt2 + cmd],
+        desc = [],
+        labelMaxLen = 0;
     
-    for( i = 0; i < nkey; i++ )
+    opts.forEach(function(opt)
     {
-        opt = opts[keys[i]];
-        arg = '-' + opt.abbr;
-        tail += '\n' + idt4 + '-' + opt.abbr + ', --' + opt.name + 
-                ' : ' + opt.desc;
+        var line = {},
+            arg = undefined;
         
-        if( opt.arg ){
-            arg += ' ' + opt.arg;
+        if( opt.abbr ){
+            line.label = '-' + opt.abbr;
+            arg = '-' + opt.abbr;
         }
-        
-        if( opt.required ){
-            tail += ' (required)';
-            head += ' ' + arg;
-        }
-        else {
-            head += ' [' + arg + ']';
+        if( opt.name ){
+            line.label += ', --' + opt.name;
+            arg = arg||('--' + opt.name);
         }
         
-        if( opt.def ){
-            tail += '\n' + idt4 + '[default] ' + opt.def;
+        if( arg )
+        {
+            desc.push(line);
+            if( line.label.length > labelMaxLen ){
+                labelMaxLen = line.label.length;
+            }
+            
+            line.desc = opt.desc||'<no desc>';
+            if( opt.def ){
+                line.def = '[default] ' + opt.def;
+            }
+            
+            if( opt.arg ){
+                line.val = 'VAL=' + opt.arg;
+                arg += ' ' + opt.arg;
+            }
+            
+            if( opt.required ){
+                line.required = true;
+                usage.push( arg );
+            }
+            else {
+                usage.push('[' + arg + ']');
+            }
         }
-        tail += '\n';
-    }
+    });
     
-    return head + '\n' + tail;
+    res.push( usage.join(' ') );
+    res.push('');
+    res.push( 'Options:' );
+    desc.forEach(function(item)
+    {
+        var sp = (new Array(labelMaxLen - item.label.length + 1)).join(' '),
+            label = idt2 + item.label + sp + idt4 + ' : ',
+            line = [label];
+        
+        line.push( item.desc );
+        if( item.val ){
+            line.push( '\n' + (new Array(label.length+1)).join(' ') );
+            line.push( item.val );
+        }
+        if( item.required ){
+            line.push( ' (required)' );
+        }
+        
+        if( item.def ){
+            line.push( '\n' + (new Array(label.length+1)).join(' ') );
+            line.push( item.def );
+        }
+        res.push( line.join('') );
+    });
+    res.push('');
+    
+    return res.join('\n');
 }
 
-function parseArgv()
+function parseArgv( opts )
 {
     var args = { __proto__: null },
         argv = process.argv.join(' '),
         remain = argv,
-        name;
+        keys = [],
+        name,val,res;
+    
+    opts.forEach(function(opt)
+    {
+        if( !opt.name ){
+            throw new Error('option name<opt.name> must be required');
+        }
+        keys.push(opt.name);
+        if( opt.abbr ){
+            keys.push(opt.abbr);
+        }
+    });
     
     // parse command line arguments
-    while( RE_ISARG.test( argv ) )
+    while( res = RE_ISARG.exec( argv ) )
     {
-        if( ( name = RegExp.$2 ) ){
-            args[name] = RegExp.$3;
+        if( ( name = res[2] ) ){
+            val = res[3]||true;
         }
-        else if( ( name = RegExp.$4 ) ){
-            args[name] = RegExp.$5;
+        else if( ( name = res[4] ) ){
+            val = res[5]||true;
+        }
+        else {
+            val = '';
         }
         
-        if( name ){
-            remain = remain.replace( RegExp.$1, '' );
+        if( name )
+        {
+            remain = remain.replace( res[1], '' );
+            if( keys.indexOf( name ) !== -1 ){
+                args[name] = val;
+            }
         }
     }
     // append plain arguments
-    args._ = remain.replace( /(^\s+|\s+|\s+$)/g, ' ' ).split(' ').slice(2);
+    args._ = remain.trim().split(' ').slice(2);
     
     return args;
 }
@@ -117,13 +178,10 @@ function mergeArgv( args, opts )
     return ( error.length ) ? error : undefined;
 }
 
-
 function Env( opts, cmd )
 {
     var obj = { __proto__: null },
-        envs = { __proto__: null },
-        argv = undefined,
-        usage = undefined;
+        err = undefined;
     
     if( arguments.length < 2 || typeof cmd !== 'string' ){
         cmd = process.argv[1].split('/').pop();
@@ -140,18 +198,23 @@ function Env( opts, cmd )
         obj[p] = process.env[p];
     }
     // create usage
-    obj.usage = makeUsage( opts, cmd );
+    obj.usage = makeUsage( cmd, opts );
     // parse command line arguments
-    obj.argv = parseArgv();
+    obj.argv = parseArgv( opts );
     // manipulate
-    obj.error = mergeArgv( obj.argv, opts );
-    // freeze
-    if( obj.error ){
-        Object.freeze( obj.error );
+    if( ( err = mergeArgv( obj.argv, opts ) ) )
+    {
+        obj.error = mergeArgv( obj.argv, opts );
+        // freeze
+        if( obj.error ){
+            Object.freeze( obj.error );
+        }
     }
+    
     Object.freeze( obj.argv._ );
     Object.freeze( obj.argv );
     Object.freeze( obj );
+    
     return obj;
 }
 
