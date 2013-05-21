@@ -1,13 +1,6 @@
 /* (C) Masatoshi Teruya */
 "use strict";
-var RE_ISARG = new RegExp( 
-        '\\s+(' + 
-        '-(\\w)(?:\\s+([^-][^\\s]*))?' + 
-        '|' + 
-        '--(\\w+)(?:=([^\\s]+))?' + 
-        ')?', 
-        'g'
-    );
+var RE_PREFIX = new RegExp( /^(-+)/ );
 
 function makeUsage( cmd, opts )
 {
@@ -88,100 +81,107 @@ function makeUsage( cmd, opts )
     return res.join('\n');
 }
 
-function parseArgv( opts )
+function parseArgv( opts, err )
 {
-    var args = { __proto__: null },
-        argv = process.argv.join(' '),
-        remain = argv,
-        keys = [],
-        name,val,res;
+    var args = { 
+            _: [],
+            __proto__: null
+        },
+        argv = process.argv.splice(2),
+        accepts = {},
+        name,val,opt,keys,attach,prefix;
     
     opts.forEach(function(opt)
     {
-        if( !opt.name ){
-            throw new Error('option name<opt.name> must be required');
+        if( opt.name ){
+            accepts['--' + opt.name] = opt;
         }
-        keys.push(opt.name);
         if( opt.abbr ){
-            keys.push(opt.abbr);
+            accepts['-' + opt.abbr] = opt;
         }
     });
     
     // parse command line arguments
-    while( res = RE_ISARG.exec( argv ) )
+    for( var i = 0, argc = argv.length; i < argc; i++ )
     {
-        if( ( name = res[2] ) ){
-            val = res[3]||true;
-        }
-        else if( ( name = res[4] ) ){
-            val = res[5]||true;
-        }
-        else {
-            val = '';
-        }
-        
-        if( name )
+        val = argv[i];
+        // match option
+        if( ( prefix = val.match( RE_PREFIX ) ) )
         {
-            remain = remain.replace( res[1], '' );
-            if( keys.indexOf( name ) !== -1 ){
-                args[name] = val;
-            }
-        }
-    }
-    // append plain arguments
-    args._ = remain.trim().split(' ').slice(2);
-    
-    return args;
-}
-
-function mergeArgv( args, opts )
-{
-    var error = [],
-        keys = Object.keys( opts ),
-        nkey = keys.length,
-        i,opt,name,abbr;
-    
-    // check name and requirement
-    for( i = 0; i < nkey; i++ )
-    {
-        opt = opts[keys[i]];
-        name = opt.name;
-        abbr = opt.abbr;
-        
-        if( !name ){
-            name = abbr;
-        }
-        else if( args[abbr] )
-        {
-            // same option declare
-            if( args[name] ){
-                error.push( 'arguments --' + name + ' declaration is duplicated.' );
+            attach = undefined;
+            if( prefix[1].length > 1 ){
+                attach = val.split( '=', 2 );
+                name = attach.shift();
             }
             else {
-                args[name] = args[abbr];
+                name = val;
             }
-            delete args[abbr];
+            
+            if( ( opt = accepts[name] ) )
+            {
+                name = opt.name||opt.abbr;
+                if( opt.arg )
+                {
+                    if( attach ){
+                        val = attach.shift();
+                    }
+                    else if( !argv[i+1].match( RE_PREFIX ) ){
+                        val = argv[++i];
+                    }
+                    else {
+                        val = undefined;
+                    }
+                }
+                else {
+                    val = true;
+                }
+                
+                args[name] = val;
+                continue;
+            }
         }
-        if( name )
-        {
-            // value required
-            if( name in args && opt.arg && !args[name] ){
-                error.push( 'passed argument --' + name + ' value is undefined' );
-            }
-            // required option
-            else if( opt.required && !args[name] ){
-                error.push( 'required argument --' + name + ' is undefined' );
-            }
-        }
+        
+        // append undefined options and plain arguments
+        args._.push( val );
     }
     
-    return ( error.length ) ? error : undefined;
+    Object.keys( accepts ).forEach(function(key)
+    {
+        opt = accepts[key];
+        if( opt )
+        {
+            name = opt.name||opt.abbr;
+            if( name in args )
+            {
+                // value required
+                if( opt.arg && !args[name] ){
+                    err.push( 'passed argument ' + key + ' value is undefined' );
+                }
+            }
+            // required
+            else if( opt.required ){
+                err.push( 'required argument ' + key + ' is undefined' );
+            }
+            
+            if( opt.abbr ){
+                delete accepts['-'+opt.abbr];
+            }
+            if( opt.name ){
+                delete accepts['--'+opt.name];
+            }
+        }
+    });
+    
+    args._cmd = process.argv[0];
+    args._script = process.argv[1];
+
+    return args;
 }
 
 function Env( opts, cmd )
 {
     var obj = { __proto__: null },
-        err = undefined;
+        err = [];
     
     if( arguments.length < 2 || typeof cmd !== 'string' ){
         cmd = process.argv[1].split('/').pop();
@@ -200,15 +200,10 @@ function Env( opts, cmd )
     // create usage
     obj.usage = makeUsage( cmd, opts );
     // parse command line arguments
-    obj.argv = parseArgv( opts );
-    // manipulate
-    if( ( err = mergeArgv( obj.argv, opts ) ) )
-    {
-        obj.error = mergeArgv( obj.argv, opts );
-        // freeze
-        if( obj.error ){
-            Object.freeze( obj.error );
-        }
+    obj.argv = parseArgv( opts, err );
+    
+    if( err.length ){
+        obj.error = err;
     }
     
     Object.freeze( obj.argv._ );
